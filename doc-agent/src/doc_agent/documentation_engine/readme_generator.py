@@ -1,16 +1,14 @@
 """Monta o rascunho de README.md a partir de ProjectMetadata.
 
-Funciona em dois modos:
-- Sem IA: so organiza os fatos coletados pelo project_scanner, com placeholders
-  onde a informacao nao pode ser inferida do codigo.
-- Com IA: recebe um GeneratedProse (produzido pelo azure_openai.py) e usa a prosa
-  para as secoes narrativas, mas os fatos (pacotes, endpoints, comandos) continuam
-  vindo sempre do scanner - a IA nunca inventa dados novos.
+So organiza os fatos coletados pelo project_scanner - nunca inventa informacao.
+Onde o codigo nao permite inferir algo (proposito de negocio, resumo narrativo),
+insere um placeholder TODO em vez de chutar. O doc-agent nao chama nenhuma IA por
+conta propria: preencher esses TODOs (ou reescrever a prosa) fica a cargo de quem
+chamou a tool - tipicamente o proprio assistente de IA do editor (Cursor, Claude,
+etc.), que ja tem acesso ao restante do contexto da conversa.
 """
 
 from __future__ import annotations
-
-from dataclasses import dataclass
 
 from doc_agent.analyzer.project_scanner import ProjectMetadata
 from doc_agent.template_engine import markdown as md
@@ -34,16 +32,6 @@ _KNOWN_DB_PACKAGE_HINTS = {
     "mongodb": "MongoDB",
     "cosmos": "Azure Cosmos DB",
 }
-
-
-@dataclass
-class GeneratedProse:
-    """Prosa opcional gerada por IA. Todos os campos sao opcionais; quando ausentes,
-    o gerador cai de volta para o formato estruturado sem-IA nessa secao."""
-
-    one_liner: str | None = None
-    purpose: str | None = None
-    architecture_summary: str | None = None
 
 
 def _is_obvious_entry(entry: str) -> bool:
@@ -128,29 +116,23 @@ def _format_endpoints(metadata: ProjectMetadata, limit: int = 15) -> list[str]:
     return lines[:limit]
 
 
-def generate_readme(
-    metadata: ProjectMetadata,
-    prose: GeneratedProse | None = None,
-    ai_used: bool = False,
-) -> str:
-    prose = prose or GeneratedProse()
+def generate_readme(metadata: ProjectMetadata) -> str:
     lines: list[str] = []
 
-    if not ai_used:
-        lines.append(
-            "<!-- Gerado em modo sem-IA: Azure OpenAI nao configurado. "
-            "Apenas metadados estruturados extraidos do codigo, sem prosa gerada por IA. -->"
-        )
-        lines.append("")
+    lines.append(
+        "<!-- Rascunho gerado deterministicamente a partir do codigo. Secoes com "
+        f"{TODO} nao podem ser inferidas do repositorio - complete-as ou peca para "
+        "o assistente de IA do seu editor preencher usando o contexto da conversa. -->"
+    )
+    lines.append("")
 
     project_name = metadata.primary_project_name
-    one_liner = prose.one_liner or TODO
     lines.append(md.heading(project_name, level=1))
     lines.append("")
-    lines.append(one_liner)
+    lines.append(TODO)
     lines.append("")
 
-    lines.extend(md.section("Para que serve", [prose.purpose or TODO]))
+    lines.extend(md.section("Para que serve", [TODO]))
 
     lines.append(md.heading("Como rodar localmente", level=2))
     lines.append("")
@@ -176,9 +158,6 @@ def generate_readme(
     if hints:
         lines.append(f"- **Indicios de armazenamento/infra:** {', '.join(hints)} (inferido de pacotes NuGet)")
     lines.append(f"- **O que consome este sistema:** {TODO}")
-    if prose.architecture_summary:
-        lines.append("")
-        lines.append(prose.architecture_summary)
     if metadata.has_web_endpoints:
         lines.append("")
         lines.append(md.heading("Endpoints identificados", level=3))

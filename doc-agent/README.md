@@ -1,15 +1,29 @@
 # doc-agent
 
-Servidor MCP (Model Context Protocol) local, em Python, com duas ferramentas:
+Servidor MCP (Model Context Protocol) em Python, com duas ferramentas:
 
-- **`gerar_readme`** — le a estrutura de um projeto .NET no seu disco e devolve um
+- **`gerar_readme`** — le a estrutura de um projeto .NET e devolve um
   rascunho de `README.md`, para que voce apenas revise e aprove em vez de escrever do zero.
 - **`analisar_arquitetura`** — infere o estilo arquitetural do projeto (Clean
   Architecture, MVC em camadas, Hexagonal...) e aponta violacoes de dependencia entre
-  camadas, tambem sem IA.
+  camadas.
 
-Fase 0/1 do projeto Doc-Agent: roda 100% local, sem Azure DevOps, sem Loop, sem publicar
-nada — so le arquivos e retorna texto.
+Nenhuma das duas chama IA por conta própria — o doc-agent só faz leitura e análise
+determinística do código. A prosa/narrativa (o que preenche os `<!-- TODO -->`) fica
+por conta de quem está chamando a tool: o assistente de IA do seu editor (Cursor,
+Claude, etc.) já tem IA própria e contexto de conversa suficiente pra completar isso,
+sem o servidor precisar ter (nem pagar por) uma IA embutida.
+
+Roda de duas formas:
+- **Local (stdio)** — voce instala e conecta na sua IDE, aponta pra um projeto no seu
+  disco (`caminho_projeto`). Ver [Conectar ao Claude Code](#conectar-ao-claude-code) /
+  [Conectar ao VS Code](#conectar-ao-vs-code).
+- **Hospedado (HTTP)** — um servidor publico que qualquer pessoa conecta por URL, sem
+  instalar nada; nesse modo as ferramentas recebem `repositorio_git` (URL publica) em
+  vez de um caminho local. Ver [Rodando como serviço público (HTTP)](#rodando-como-servico-publico-http).
+
+Fase 0/1 do projeto Doc-Agent: sem Azure DevOps, sem Loop, sem publicar nada — so le
+codigo (do disco ou de um repositorio publico) e retorna texto.
 
 ## Como funciona `gerar_readme`
 
@@ -19,14 +33,13 @@ nada — so le arquivos e retorna texto.
    (via XML dos `.csproj`), estrutura de pastas de alto nivel, controllers/endpoints
    (`[HttpGet]`, `[HttpPost]`, etc. e `app.MapGet(...)` de minimal APIs) e comentarios
    XML (`///`).
-3. Se as credenciais do Azure OpenAI estiverem configuradas, a prosa das secoes
-   narrativas (o que o sistema faz, para que serve) e escrita por IA — mas **sempre
-   com base apenas nos fatos coletados no passo 2**, nunca inventando informacao nova.
-4. Se as credenciais nao estiverem configuradas, a ferramenta roda em **modo sem-IA**:
-   monta um README estruturado a partir dos metadados, com placeholders
-   (`<!-- TODO: preencher -->`) onde a informacao nao pode ser inferida do codigo, e
-   avisa isso no topo do conteudo gerado.
-5. O conteudo e retornado como texto markdown — nada e escrito no seu disco.
+3. O `readme_generator` monta um README estruturado a partir desses metadados. Onde a
+   informacao nao pode ser inferida do codigo (proposito de negocio, resumo
+   narrativo), insere um placeholder `<!-- TODO: preencher -->` em vez de inventar —
+   **nunca chama nenhuma IA por conta propria**.
+4. O conteudo e retornado como texto markdown — nada e escrito no seu disco. Preencher
+   os TODOs fica por conta de quem chamou a tool (voce, ou o assistente de IA do seu
+   editor, que ja tem contexto pra isso).
 
 ## Como funciona `analisar_arquitetura`
 
@@ -66,24 +79,6 @@ python -m venv .venv
 pip install -e .
 ```
 
-## Configurar o Azure OpenAI (opcional)
-
-Copie `.env.example` para `.env` e preencha:
-
-```bash
-cp .env.example .env
-```
-
-```text
-AZURE_OPENAI_ENDPOINT=https://<seu-recurso>.openai.azure.com
-AZURE_OPENAI_API_KEY=<sua-chave>
-AZURE_OPENAI_DEPLOYMENT=<nome-do-deployment-de-chat>
-AZURE_OPENAI_API_VERSION=2024-10-21
-```
-
-Se qualquer uma dessas variaveis estiver faltando, o `gerar_readme` roda automaticamente
-em modo sem-IA — nao e preciso configurar nada para testar a ferramenta.
-
 ## Rodar os testes
 
 ```bash
@@ -97,7 +92,9 @@ uv run doc-agent
 ```
 
 O processo fica esperando um cliente MCP conectar via stdio (nao ha saida se estiver
-tudo certo — o protocolo e binario/JSON-RPC sobre stdin/stdout).
+tudo certo — o protocolo e binario/JSON-RPC sobre stdin/stdout). Esse e o modo padrao
+(`DOC_AGENT_TRANSPORT` nao definido). Para rodar em HTTP, ver a secao
+[Rodando como serviço público (HTTP)](#rodando-como-servico-publico-http).
 
 Para inspecionar manualmente com o [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector):
 
@@ -166,30 +163,103 @@ placeholders e colar no repositório.
 Retorna um relatório markdown com o estilo arquitetural detectado, a confiança da
 inferência, as camadas reconhecidas e as violações de dependência encontradas.
 
+Se você estiver conectado no servidor **hospedado** (HTTP), use `repositorio_git` em
+vez de `caminho_projeto`:
+
+> Use a ferramenta gerar_readme para o repositório `https://github.com/usuario/MeuSistema`
+
+Exatamente um dos dois parâmetros deve ser informado por chamada — nunca os dois, nunca
+nenhum.
+
+## Rodando como serviço público (HTTP)
+
+Nesse modo o servidor roda hospedado (não é mais o cliente quem inicia o processo), e
+por isso não tem acesso ao disco de quem está usando. As ferramentas passam a receber
+`repositorio_git` (URL https pública) em vez de `caminho_projeto` — o servidor clona
+raso (`--depth 1`), analisa e descarta o repositório a cada chamada.
+
+**Limites de abuso aplicados** (não é um serviço público sem controle nenhum, mas
+também não é hardening de segurança completo — é o mínimo pra não virar um proxy de
+clone-de-repo-qualquer):
+- só aceita `https://` de `github.com`, `gitlab.com`, `bitbucket.org` ou `dev.azure.com`;
+- timeout de 60s no clone;
+- repositório maior que 200MB é rejeitado.
+
+### Rodar localmente em modo HTTP
+
+```bash
+DOC_AGENT_TRANSPORT=streamable-http PORT=8000 uv run doc-agent
+```
+
+Sobe em `http://127.0.0.1:8000/mcp`.
+
+### Build da imagem Docker
+
+```bash
+docker build -t doc-agent .
+docker run -p 8000:8000 doc-agent
+```
+
+### Deploy no Fly.io
+
+Recomendado para esta primeira versão pública: tem tier gratuito, deploy via Docker
+em minutos, sem burocracia de assinatura (dá pra migrar para Azure Container Apps
+depois, se isso passar a estar ligado a um tenant/empresa específica — é só trocar o
+alvo do container, o código não muda).
+
+```bash
+fly auth login          # uma vez, cria/loga na conta
+fly launch               # dentro de mcp/doc-agent/; detecta o Dockerfile e o fly.toml
+fly deploy
+```
+
+A URL final fica `https://<seu-app>.fly.dev/mcp`.
+
+### Conectar um cliente ao servidor hospedado
+
+Em vez de `"command"` (stdio), a config do cliente aponta pra URL:
+
+```json
+{
+  "mcpServers": {
+    "doc-agent": {
+      "type": "http",
+      "url": "https://<seu-app>.fly.dev/mcp"
+    }
+  }
+}
+```
+
+Funciona assim no Cursor (`~/.cursor/mcp.json` ou `.cursor/mcp.json` do projeto),
+Claude Code (`.mcp.json`) e VS Code (`.vscode/mcp.json`, com `"type": "http"`).
+
 ## Estrutura do projeto
 
 ```text
 src/doc_agent/
-  server.py                          # cria o FastMCP e registra as ferramentas; entrypoint stdio
+  server.py                          # cria o FastMCP, registra as ferramentas; entrypoint stdio/HTTP
+  source_resolver.py                 # caminho local ou clone raso de repositorio_git (com limites de abuso)
   tools/
-    gerar_readme.py                  # orquestra analyzer -> IA opcional -> documentation_engine
-    analisar_arquitetura.py          # orquestra analyzer -> documentation_engine (sem IA)
+    gerar_readme.py                  # orquestra source_resolver -> analyzer -> documentation_engine
+    analisar_arquitetura.py          # orquestra source_resolver -> analyzer -> documentation_engine
   analyzer/
     project_scanner.py               # le .csproj/.sln, estrutura, controllers, XML docs
     architecture_analyzer.py         # infere estilo arquitetural e violacoes de dependencia
   template_engine/
     markdown.py                      # helpers genericos de markdown (heading, secao, listas)
   documentation_engine/
-    readme_generator.py              # monta o README (com ou sem prosa de IA), usa o template_engine
-    azure_openai.py                  # wrapper opcional do Azure OpenAI
+    readme_generator.py              # monta o README (estruturado, sem IA), usa o template_engine
     architecture_report.py           # monta o relatorio de arquitetura, usa o template_engine
 tests/                               # pytest
   fixtures/                          # projeto .NET de exemplo (gerar_readme)
   fixtures_architecture/             # solutions de exemplo (analisar_arquitetura)
+Dockerfile                           # imagem para o modo HTTP hospedado
+fly.toml                             # config de deploy no Fly.io (ponto de partida para `fly launch`)
 ```
 
 ## Fora de escopo nesta fase
 
 Azure DevOps, abertura de Pull Requests, Microsoft Loop, Microsoft Graph, Microsoft
-Agent Framework, transporte HTTP e autenticação Entra ID. Ver `../README.md` para a
-visão completa das fases futuras.
+Agent Framework, autenticação Entra ID, upload de `.zip`, contas/API keys/rate
+limiting real, e deploy automático via CI (o deploy no Fly.io é manual por enquanto).
+Ver `../README.md` para a visão completa das fases futuras.

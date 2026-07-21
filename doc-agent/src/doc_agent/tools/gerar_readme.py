@@ -1,42 +1,34 @@
-"""Implementacao da ferramenta MCP gerar_readme: orquestra scanner -> (IA opcional) -> gerador."""
+"""Implementacao da ferramenta MCP gerar_readme: orquestra fonte -> scanner -> gerador.
+
+Nao chama nenhuma IA - so organiza fatos extraidos deterministicamente do codigo.
+Prosa/narrativa fica a cargo do cliente MCP (o assistente de IA do editor de quem
+esta chamando a tool), que ja tem contexto suficiente pra preencher os TODOs.
+"""
 
 from __future__ import annotations
 
-import logging
-from pathlib import Path
-
 from doc_agent.analyzer.project_scanner import ProjectValidationError, scan_project
-from doc_agent.documentation_engine import azure_openai
-from doc_agent.documentation_engine.readme_generator import GeneratedProse, generate_readme
-
-logger = logging.getLogger(__name__)
+from doc_agent.documentation_engine.readme_generator import generate_readme
+from doc_agent.source_resolver import SourceResolutionError, resolve_project_source
 
 
-def gerar_readme(caminho_projeto: str) -> str:
-    """Gera um rascunho de README.md a partir de um projeto .NET local.
+def gerar_readme(caminho_projeto: str | None = None, repositorio_git: str | None = None) -> str:
+    """Gera um rascunho de README.md a partir de um projeto .NET.
 
-    Le a estrutura do projeto em `caminho_projeto` (deve conter ao menos um .csproj
-    ou .sln), extrai metadados deterministicos (target framework, pacotes NuGet,
-    controllers/endpoints, comentarios XML) e monta um README seguindo um padrao fixo.
-    Se as credenciais do Azure OpenAI estiverem configuradas no ambiente, usa IA para
-    redigir a prosa das secoes narrativas; caso contrario, roda em modo sem-IA e avisa
-    isso no proprio conteudo retornado. Onde a informacao nao puder ser inferida do
-    codigo, insere um placeholder em vez de inventar fatos.
+    Informe exatamente um dos dois: `caminho_projeto` (pasta local, deve conter ao
+    menos um .csproj ou .sln) ou `repositorio_git` (URL https publica de um
+    repositorio, para uso via servidor hospedado sem acesso ao disco local - clona
+    raso, analisa e descarta).
+
+    Extrai metadados deterministicos (target framework, pacotes NuGet,
+    controllers/endpoints, comentarios XML) e monta um README seguindo um padrao
+    fixo. Onde a informacao nao puder ser inferida do codigo (proposito de negocio,
+    resumo narrativo), insere um placeholder TODO em vez de inventar - preencher
+    isso fica por conta de quem chamou a tool.
     """
-    root_path = Path(caminho_projeto)
-
     try:
-        metadata = scan_project(root_path)
-    except ProjectValidationError as exc:
+        with resolve_project_source(caminho_projeto, repositorio_git) as root_path:
+            metadata = scan_project(root_path)
+            return generate_readme(metadata)
+    except (SourceResolutionError, ProjectValidationError) as exc:
         raise ValueError(str(exc)) from exc
-
-    config = azure_openai.load_config()
-    if config is None:
-        return generate_readme(metadata, ai_used=False)
-
-    try:
-        prose = azure_openai.generate_prose(metadata, config)
-        return generate_readme(metadata, prose=prose, ai_used=True)
-    except Exception:
-        logger.exception("Falha ao gerar prosa via Azure OpenAI; caindo para modo sem-IA.")
-        return generate_readme(metadata, prose=GeneratedProse(), ai_used=False)

@@ -10,19 +10,8 @@ def _sample_metadata() -> scanner.ProjectMetadata:
     return scanner.scan_project(FIXTURES_DIR)
 
 
-def test_generate_readme_no_ai_includes_no_ai_warning() -> None:
-    readme = generator.generate_readme(_sample_metadata(), ai_used=False)
-    assert "modo sem-IA" in readme
-
-
-def test_generate_readme_no_ai_omits_warning_when_ai_used() -> None:
-    prose = generator.GeneratedProse(one_liner="Faz X.", purpose="Serve para Y.")
-    readme = generator.generate_readme(_sample_metadata(), prose=prose, ai_used=True)
-    assert "modo sem-IA" not in readme
-
-
-def test_generate_readme_uses_placeholder_when_no_prose() -> None:
-    readme = generator.generate_readme(_sample_metadata(), ai_used=False)
+def test_generate_readme_uses_placeholder_for_narrative_sections() -> None:
+    readme = generator.generate_readme(_sample_metadata())
     assert generator.TODO in readme
 
 
@@ -61,15 +50,3 @@ def test_generate_readme_has_all_required_sections() -> None:
         "## Contatos",
     ):
         assert heading in readme
-
-
-def test_generate_readme_uses_ai_prose_when_provided() -> None:
-    prose = generator.GeneratedProse(
-        one_liner="Um sistema de gestao de pedidos.",
-        purpose="Centraliza o fluxo de pedidos da loja.",
-        architecture_summary="Segue arquitetura em camadas com MediatR.",
-    )
-    readme = generator.generate_readme(_sample_metadata(), prose=prose, ai_used=True)
-    assert "Um sistema de gestao de pedidos." in readme
-    assert "Centraliza o fluxo de pedidos da loja." in readme
-    assert "Segue arquitetura em camadas com MediatR." in readme

@@ -96,6 +96,14 @@ O humano nunca sai do controle; só deixa de escrever da folha em branco.
 - **Autenticação:** Entra ID (Azure AD) com managed identity — sem segredos no código.
 - **Hospedagem:** Azure App Service ou Container Apps, dentro da rede corporativa.
 
+> **Nota de implementação:** o `doc-agent` (Python, ver `doc-agent/README.md`) diverge
+> deste stack em um ponto deliberado — não embute nenhum "motor de IA" próprio. As
+> tools fazem só leitura e análise determinística do código; a prosa/narrativa fica a
+> cargo do cliente MCP (o assistente de IA de quem está usando a tool), que já tem
+> modelo próprio. Isso evita o servidor precisar pagar/gerenciar credenciais de IA
+> para servir terceiros, especialmente relevante agora que existe um modo hospedado
+> público (ver seção "Rodando como serviço público (HTTP)" no README do doc-agent).
+
 ## 8. Rollout em fases (não construa tudo de uma vez)
 
 **Fase 0 — Prova de conceito (1 ferramenta):** só `gerar_readme`, rodando local, contra um
