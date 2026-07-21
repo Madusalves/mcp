@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.uv/
+
+# artefatos de build .NET gerados ao abrir os fixtures de teste no editor
+# (o project_scanner ja ignora essas pastas na analise; nao precisam ser versionadas)
+tests/**/bin/
+tests/**/obj/

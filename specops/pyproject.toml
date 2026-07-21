@@ -1,0 +1,24 @@
+[project]
+name = "specops"
+version = "0.1.0"
+description = "Servidor MCP que gera rascunhos de documentacao a partir de projetos .NET existentes"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp[cli]>=1.28.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+specops = "specops.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/specops"]

@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SpecOps — MCP de documentação automatizada</title>
+<meta name="description" content="Servidor MCP que gera rascunhos de README e relatórios de arquitetura a partir de projetos .NET, sem enviar seu código para nenhuma IA de terceiros." />
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f6f7f9;
+    --text: #1a1d23;
+    --text-soft: #565d6b;
+    --border: #e3e6ea;
+    --accent: #2454ff;
+    --accent-soft: #eef1ff;
+    --code-bg: #14161a;
+    --code-text: #e8eaed;
+    --ok: #1a7f4e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --bg-soft: #171a20;
+      --text: #e9ebf0;
+      --text-soft: #a3a9b5;
+      --border: #262b33;
+      --accent: #6f8dff;
+      --accent-soft: #1b2140;
+      --code-bg: #08090c;
+      --code-text: #e8eaed;
+      --ok: #4fd393;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1115; --bg-soft: #171a20; --text: #e9ebf0; --text-soft: #a3a9b5;
+    --border: #262b33; --accent: #6f8dff; --accent-soft: #1b2140; --code-bg: #08090c;
+    --code-text: #e8eaed; --ok: #4fd393;
+  }
+  :root[data-theme="light"] {
+    --bg: #ffffff; --bg-soft: #f6f7f9; --text: #1a1d23; --text-soft: #565d6b;
+    --border: #e3e6ea; --accent: #2454ff; --accent-soft: #eef1ff; --code-bg: #14161a;
+    --code-text: #e8eaed; --ok: #1a7f4e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    line-height: 1.55;
+  }
+  main { max-width: 920px; margin: 0 auto; padding: 0 24px 96px; }
+  header.top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 24px; max-width: 920px; margin: 0 auto;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+  .brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--accent-soft); }
+  header.top a { color: var(--text-soft); text-decoration: none; font-size: 14px; }
+  header.top a:hover { color: var(--accent); }
+
+  .hero { padding: 56px 0 24px; }
+  .hero h1 { font-size: clamp(28px, 4vw, 40px); margin: 0 0 14px; letter-spacing: -0.02em; }
+  .hero p.lead { font-size: 18px; color: var(--text-soft); max-width: 64ch; margin: 0 0 28px; }
+  .cta-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 18px; border-radius: 8px; font-size: 14px; font-weight: 600;
+    text-decoration: none; border: 1px solid transparent; cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.primary:hover { opacity: 0.92; }
+  .btn.ghost { background: transparent; color: var(--text); border-color: var(--border); }
+  .btn.ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  section { padding: 40px 0; border-top: 1px solid var(--border); }
+  section h2 { font-size: 22px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  section p.section-lead { color: var(--text-soft); margin: 0 0 28px; max-width: 68ch; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .card h3 { margin: 0 0 8px; font-size: 15px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); }
+  .card p { margin: 0; color: var(--text-soft); font-size: 14px; }
+
+  ul.trust { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  ul.trust li { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; }
+  ul.trust li .mark { color: var(--ok); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+  ul.trust strong { display: block; margin-bottom: 2px; }
+  ul.trust span.detail { color: var(--text-soft); font-size: 13.5px; }
+
+  .steps { counter-reset: step; display: grid; gap: 20px; }
+  .step { display: flex; gap: 14px; }
+  .step .num {
+    counter-increment: step; flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step .num::before { content: counter(step); }
+  .step .body { flex: 1; min-width: 0; }
+  .step .body p { margin: 0 0 10px; color: var(--text-soft); font-size: 14.5px; }
+
+  .code-block {
+    position: relative; background: var(--code-bg); color: var(--code-text);
+    border-radius: 10px; padding: 16px 44px 16px 16px; font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow-x: auto; white-space: pre;
+  }
+  .copy-btn {
+    position: absolute; top: 10px; right: 10px;
+    background: rgba(255,255,255,0.08); color: var(--code-text);
+    border: 1px solid rgba(255,255,255,0.18); border-radius: 6px;
+    font-size: 12px; padding: 5px 9px; cursor: pointer;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.16); }
+  .copy-btn.copied { color: var(--ok); border-color: var(--ok); }
+
+  .client-tabs { display: flex; gap: 8px; margin: 14px 0 12px; flex-wrap: wrap; }
+  .client-tabs button {
+    background: var(--bg-soft); border: 1px solid var(--border); color: var(--text-soft);
+    padding: 6px 12px; border-radius: 999px; font-size: 12.5px; cursor: pointer;
+  }
+  .client-tabs button.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .client-path { font-size: 13px; color: var(--text-soft); margin: 0 0 10px; }
+  .client-path code { background: var(--bg-soft); padding: 2px 6px; border-radius: 5px; }
+
+  footer { border-top: 1px solid var(--border); padding: 28px 0 0; margin-top: 20px; color: var(--text-soft); font-size: 13px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  footer a { color: var(--text-soft); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="dot"></span> SpecOps</div>
+  <a href="https://github.com/Madusalves/mcp" target="_blank" rel="noopener">GitHub ↗</a>
+</header>
+
+<main>
+  <section class="hero" style="border-top: none; padding-top: 8px;">
+    <h1>Documentação de projetos .NET, gerada a partir do código que já existe.</h1>
+    <p class="lead">
+      Servidor MCP que lê um projeto .NET e devolve um rascunho de README e um
+      relatório de arquitetura — determinístico, sem inventar nada, para você
+      revisar e aprovar. Não instala nada: conecta por URL no seu editor de IA.
+    </p>
+    <div class="cta-row">
+      <a class="btn primary" href="#conectar">Conectar agora</a>
+      <a class="btn ghost" href="#confianca">Por que confiar</a>
+    </div>
+  </section>
+
+  <section>
+    <h2>O que ele faz</h2>
+    <p class="section-lead">Duas ferramentas, ambas 100% leitura — nada é escrito no seu repositório sem você revisar.</p>
+    <div class="cards">
+      <div class="card">
+        <h3>gerar_readme</h3>
+        <p>Lê target framework, pacotes NuGet, estrutura de pastas, controllers/endpoints e comentários XML, e monta um README estruturado. Onde não dá pra inferir do código (propósito de negócio), deixa um <code>&lt;!-- TODO --&gt;</code> em vez de inventar.</p>
+      </div>
+      <div class="card">
+        <h3>analisar_arquitetura</h3>
+        <p>Infere o estilo arquitetural (Clean Architecture, MVC em camadas, Hexagonal) pelo grafo de <code>ProjectReference</code> entre os <code>.csproj</code>, e aponta violações de dependência entre camadas.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="confianca">
+    <h2>Por que confiar</h2>
+    <p class="section-lead">Isso não é um SaaS fechado chamando uma IA nos bastidores. É código aberto, e o que ele faz com o seu repositório é limitado de propósito.</p>
+    <ul class="trust">
+      <li><span class="mark">✓</span><div><strong>Nenhuma IA embutida no servidor</strong><span class="detail">As duas ferramentas fazem só leitura e análise determinística de código. Quem escreve a prosa (os TODOs do README) é a IA do seu próprio editor — Cursor, Claude, VS Code — não um modelo que este servidor chama ou paga.</span></div></li>
+      <li><span class="mark">✓</span><div><strong>Seu código não fica armazenado</strong><span class="detail">No modo hospedado, cada chamada faz um clone raso (<code>--depth 1</code>) do repositório informado, analisa, e descarta o clone assim que termina.</span></div></li>
+      <li><span class="mark">✓</span><div><strong>Limites de abuso aplicados</strong><span class="detail">Só aceita HTTPS de github.com, gitlab.com, bitbucket.org ou dev.azure.com; timeout de 60s no clone; repositório acima de 200MB é rejeitado.</span></div></li>
+      <li><span class="mark">✓</span><div><strong>Código aberto</strong><span class="detail">Todo o servidor está no GitHub, incluindo o próprio Dockerfile usado para hospedar isso — não tem caixa-preta.</span></div></li>
+    </ul>
+  </section>
+
+  <section id="conectar">
+    <h2>Conectar em 30 segundos</h2>
+    <p class="section-lead">Cole isto na configuração de MCP do seu editor — nenhuma instalação local necessária.</p>
+
+    <div class="client-tabs" role="tablist">
+      <button type="button" class="active" data-client="generic">Config genérica</button>
+      <button type="button" data-client="claude">Claude Code</button>
+      <button type="button" data-client="cursor">Cursor</button>
+      <button type="button" data-client="vscode">VS Code</button>
+    </div>
+    <p class="client-path" id="client-path"></p>
+
+    <div class="code-block">
+      <button class="copy-btn" id="copy-btn" type="button">copiar</button>
+      <code id="snippet">carregando…</code>
+    </div>
+
+    <div class="steps" style="margin-top: 28px;">
+      <div class="step">
+        <div class="num"></div>
+        <div class="body">
+          <p>Cole o JSON acima no arquivo indicado do seu cliente MCP (crie o arquivo se ele não existir).</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num"></div>
+        <div class="body">
+          <p>No chat do editor, peça: <em>"use a ferramenta gerar_readme para o repositório https://github.com/usuario/MeuProjeto"</em>.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num"></div>
+        <div class="body">
+          <p>Revise o markdown retornado, preencha os <code>TODO</code>s e cole no seu repositório. Nada é publicado automaticamente.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer style="max-width: 920px; margin: 0 auto; padding: 0 24px 40px;">
+  <span>SpecOps — leitura e análise determinística de projetos .NET, sem IA embutida.</span>
+  <a href="https://github.com/Madusalves/mcp/blob/main/specops/README.md" target="_blank" rel="noopener">Documentação completa ↗</a>
+</footer>
+
+<script>
+(function () {
+  var mcpUrl = window.location.origin + "/mcp";
+
+  var templates = {
+    generic: {
+      path: "Config do seu cliente MCP (arquivo varia por ferramenta — veja as abas acima).",
+      json: function (url) {
+        return '{\n  "mcpServers": {\n    "specops": {\n      "type": "http",\n      "url": "' + url + '"\n    }\n  }\n}';
+      }
+    },
+    claude: {
+      path: "Arquivo .mcp.json, na raiz do projeto onde você usa o Claude Code.",
+      json: function (url) {
+        return '{\n  "mcpServers": {\n    "specops": {\n      "type": "http",\n      "url": "' + url + '"\n    }\n  }\n}';
+      }
+    },
+    cursor: {
+      path: "Arquivo ~/.cursor/mcp.json (global) ou .cursor/mcp.json (só neste projeto).",
+      json: function (url) {
+        return '{\n  "mcpServers": {\n    "specops": {\n      "type": "http",\n      "url": "' + url + '"\n    }\n  }\n}';
+      }
+    },
+    vscode: {
+      path: "Arquivo .vscode/mcp.json, na raiz do projeto.",
+      json: function (url) {
+        return '{\n  "servers": {\n    "specops": {\n      "type": "http",\n      "url": "' + url + '"\n    }\n  }\n}';
+      }
+    }
+  };
+
+  var snippetEl = document.getElementById("snippet");
+  var pathEl = document.getElementById("client-path");
+  var tabs = document.querySelectorAll(".client-tabs button");
+
+  function render(client) {
+    var t = templates[client];
+    snippetEl.textContent = t.json(mcpUrl);
+    pathEl.textContent = t.path;
+    tabs.forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-client") === client);
+    });
+  }
+
+  tabs.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      render(btn.getAttribute("data-client"));
+    });
+  });
+
+  render("generic");
+
+  document.getElementById("copy-btn").addEventListener("click", function () {
+    var btn = this;
+    navigator.clipboard.writeText(snippetEl.textContent).then(function () {
+      var original = btn.textContent;
+      btn.textContent = "copiado ✓";
+      btn.classList.add("copied");
+      setTimeout(function () {
+        btn.textContent = original;
+        btn.classList.remove("copied");
+      }, 1600);
+    });
+  });
+})();
+</script>
+</body>
+</html>
